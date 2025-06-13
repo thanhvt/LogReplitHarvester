@@ -89,8 +89,18 @@ class SSHConnection:
             # Connect to server
             self.ssh_client.connect(**connect_params)
             
-            # Create SFTP client
+            # Create SFTP client with optimized settings
             self.sftp_client = self.ssh_client.open_sftp()
+            
+            # Configure SFTP for better stability
+            transport = self.ssh_client.get_transport()
+            if transport:
+                # Set keepalive to prevent connection drops
+                transport.set_keepalive(30)
+                # Increase window size for better performance
+                transport.default_window_size = 2097152  # 2MB window
+                transport.packetizer.REKEY_BYTES = pow(2, 40)
+                transport.packetizer.REKEY_PACKETS = pow(2, 40)
             
             self.connected = True
             logger.info(f"Successfully connected to {self.config['name']} ({self.config['host']})")
@@ -206,9 +216,25 @@ class SSHConnection:
                 if "garbage" in error_msg or "packet" in error_msg:
                     logger.warning(f"SSH packet error on attempt {attempt + 1}/{max_retries}: {e}")
                     if attempt < max_retries - 1:
-                        # Try to reconnect
-                        logger.info("Attempting to reconnect...")
+                        # Clean up partial download
+                        if os.path.exists(local_path):
+                            try:
+                                os.remove(local_path)
+                                logger.info(f"Removed partial download: {local_path}")
+                            except:
+                                pass
+                        
+                        # Wait longer before retry
+                        import time
+                        wait_time = (attempt + 1) * 3  # Progressive backoff: 3, 6, 9 seconds
+                        logger.info(f"Waiting {wait_time} seconds before retry...")
+                        time.sleep(wait_time)
+                        
+                        # Force reconnect with fresh connection
+                        logger.info("Force reconnecting with fresh SSH connection...")
                         self.disconnect()
+                        time.sleep(2)  # Brief pause before reconnect
+                        
                         if self.connect():
                             logger.info("Reconnected successfully")
                             continue
@@ -216,10 +242,14 @@ class SSHConnection:
                             logger.error("Failed to reconnect")
                             return False
                     else:
-                        logger.error(f"Max retries reached for {remote_path}")
+                        logger.error(f"Max retries reached for {remote_path} - garbage packet error persists")
                         return False
                 else:
                     logger.error(f"SSH error downloading {remote_path}: {e}")
+                    if attempt < max_retries - 1:
+                        import time
+                        time.sleep(2)
+                        continue
                     return False
                     
             except socket.error as e:

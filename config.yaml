@@ -36,8 +36,8 @@ settings:
   # Default directory to download files
   default_download_path: "./downloads"
   
-  # Maximum number of concurrent file transfers (giảm để tránh lỗi packet)
-  max_concurrent_transfers: 2
+  # Maximum number of concurrent file transfers (đặt 1 để tránh lỗi garbage packet)
+  max_concurrent_transfers: 1
   
   # Number of retry attempts for failed operations (tăng để xử lý lỗi mạng)
   retry_attempts: 5
