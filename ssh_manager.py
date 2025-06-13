@@ -168,16 +168,28 @@ class SSHConnection:
                 else:
                     # File
                     if fnmatch.fnmatch(item.filename, pattern):
-                        # Check time filter
+                        # Kiểm tra bộ lọc thời gian
                         file_mtime = datetime.fromtimestamp(item.st_mtime)
+                        logger = logging.getLogger(__name__)
                         
-                        # Single date filter (files modified after this date)
-                        if time_filter and file_mtime < time_filter:
-                            continue
+                        logger.debug(f"File: {item.filename}, Path: {item_path}")
+                        logger.debug(f"  - File mtime: {file_mtime} ({file_mtime.strftime('%d/%m/%Y %H:%M:%S')})")
                         
-                        # Date range filter (files modified between start and end dates)
-                        if time_filter_end and file_mtime > time_filter_end:
-                            continue
+                        # Bộ lọc ngày đơn (các file được sửa đổi sau ngày này)
+                        if time_filter:
+                            logger.debug(f"  - Time filter: {time_filter} ({time_filter.strftime('%d/%m/%Y %H:%M:%S')})")
+                            if file_mtime < time_filter:
+                                logger.debug(f"  - SKIP: File quá cũ (mtime < time_filter)")
+                                continue
+                        
+                        # Bộ lọc khoảng ngày (các file được sửa đổi giữa ngày bắt đầu và kết thúc)
+                        if time_filter_end:
+                            logger.debug(f"  - Time filter end: {time_filter_end} ({time_filter_end.strftime('%d/%m/%Y %H:%M:%S')})")
+                            if file_mtime > time_filter_end:
+                                logger.debug(f"  - SKIP: File quá mới (mtime > time_filter_end)")
+                                continue
+                        
+                        logger.debug(f"  - ACCEPTED: File nằm trong khoảng thời gian lọc")
                         
                         files.append({
                             'path': item_path,

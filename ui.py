@@ -374,6 +374,24 @@ class LogCollectorUI:
                 console.print(f"Scanning {server_name}:{dir_config['path']}...")
                 
                 try:
+
+                    # Log thông tin bộ lọc thời gian được sử dụng
+                    logger = logging.getLogger(__name__)
+
+                    if self.time_filter and self.time_filter_end:
+                        logger.info(f"Using date range filter: from {self.time_filter} to {self.time_filter_end}")
+                        console.print(f"[dim]Using date range: {self.time_filter.strftime('%d/%m/%Y %H:%M')} to {self.time_filter_end.strftime('%d/%m/%Y %H:%M')}[/dim]")
+                    elif self.time_filter:
+                        logger.info(f"Using time filter: after {self.time_filter}")
+                        console.print(f"[dim]Using time filter: after {self.time_filter.strftime('%d/%m/%Y %H:%M')}[/dim]")
+                    else:
+                        logger.info("No time filter applied")
+                        console.print("[dim]No time filter applied[/dim]")
+
+                    # Tạm thời bật logging chi tiết trong ssh_manager
+                    previous_level = logging.getLogger('ssh_manager').level
+                    logging.getLogger('ssh_manager').setLevel(logging.DEBUG)
+
                     files = connection.list_files(
                         dir_config['path'],
                         dir_config.get('file_pattern', '*'),
@@ -394,6 +412,8 @@ class LogCollectorUI:
                     
                     console.print(f"[green]Found {len(files)} files in {dir_config['name']}[/green]")
                     
+                    # Khôi phục log level sau khi gọi xong
+                    logging.getLogger('ssh_manager').setLevel(previous_level)
                 except Exception as e:
                     console.print(f"[red]Error scanning {dir_config['name']}: {e}[/red]")
         

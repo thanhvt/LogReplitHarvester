@@ -184,6 +184,9 @@ def get_unique_filename(base_path: str, filename: str) -> str:
 
 def parse_time_string(time_str: str) -> Optional[datetime]:
     """Parse various time string formats into datetime object"""
+    logger = logging.getLogger(__name__)
+    logger.debug(f"Attempting to parse time string: '{time_str}'")
+    
     formats = [
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
@@ -202,10 +205,14 @@ def parse_time_string(time_str: str) -> Optional[datetime]:
     
     for fmt in formats:
         try:
-            return datetime.strptime(time_str, fmt)
+            parsed_date = datetime.strptime(time_str, fmt)
+            logger.debug(f"Successfully parsed '{time_str}' with format '{fmt}' to: {parsed_date}")
+            return parsed_date
         except ValueError:
+            logger.debug(f"Format '{fmt}' did not match '{time_str}'")
             continue
     
+    logger.warning(f"Failed to parse time string: '{time_str}' with any format")
     return None
 
 def get_custom_time_range():
@@ -214,6 +221,8 @@ def get_custom_time_range():
     from rich.prompt import Prompt
     
     console = Console()
+    logger = logging.getLogger(__name__)
+    logger.debug("Entering custom date range setup")
     
     console.print("\n[bold]Custom Date Range Setup[/bold]")
     console.print("Supported formats:")
@@ -226,29 +235,50 @@ def get_custom_time_range():
     try:
         # Get start date
         start_str = Prompt.ask("\nEnter start date/time")
+        logger.debug(f"User entered start date/time: '{start_str}'")
+        
         start_date = parse_time_string(start_str)
         
         if not start_date:
+            logger.warning(f"Failed to parse start date: '{start_str}'")
             console.print("[red]Invalid start date format![/red]")
             return None, None
         
+        logger.debug(f"Parsed start_date: {start_date} ({start_date.strftime('%d/%m/%Y %H:%M:%S')})")
+        
         # Get end date
         end_str = Prompt.ask("Enter end date/time")
+        logger.debug(f"User entered end date/time: '{end_str}'")
+        
         end_date = parse_time_string(end_str)
         
         if not end_date:
+            logger.warning(f"Failed to parse end date: '{end_str}'")
             console.print("[red]Invalid end date format![/red]")
             return None, None
         
+        logger.debug(f"Parsed end_date: {end_date} ({end_date.strftime('%d/%m/%Y %H:%M:%S')})")
+        
         # Validate date range
         if start_date >= end_date:
+            logger.warning(f"Invalid date range: start_date ({start_date}) >= end_date ({end_date})")
             console.print("[red]Start date must be before end date![/red]")
             return None, None
         
+        # Chuẩn hóa thời gian để chắc chắn seconds và microseconds đều = 0
+        start_date = start_date.replace(second=0, microsecond=0)
+        end_date = end_date.replace(second=59, microsecond=999999)
+        
+        logger.debug(f"Normalized start_date: {start_date}")
+        logger.debug(f"Normalized end_date: {end_date}")
+        
         console.print(f"[green]Custom range set: {start_date.strftime('%Y-%m-%d %H:%M')} to {end_date.strftime('%Y-%m-%d %H:%M')}[/green]")
+        logger.info(f"Custom date range set: {start_date} to {end_date}")
+        
         return start_date, end_date
         
     except Exception as e:
+        logger.error(f"Error setting custom date range: {e}", exc_info=True)
         console.print(f"[red]Error setting custom date range: {e}[/red]")
         return None, None
 
