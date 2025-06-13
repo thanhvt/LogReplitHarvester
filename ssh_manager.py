@@ -192,7 +192,7 @@ class SSHConnection:
         except Exception as e:
             logger.error(f"Error accessing {path}: {e}")
     
-    def download_file(self, remote_path: str, local_path: str, progress_callback=None, max_retries: int = 3) -> bool:
+    def download_file(self, remote_path: str, local_path: str, progress_callback=None, max_retries: int = 3, chunk_size: int = 32768) -> bool:
         """Download a file from remote server with retry mechanism"""
         if not self.connected or not self.sftp_client:
             raise Exception("Not connected to server")
@@ -202,14 +202,23 @@ class SSHConnection:
         
         for attempt in range(max_retries):
             try:
-                # Download file with progress callback
-                if progress_callback:
-                    self.sftp_client.get(remote_path, local_path, callback=progress_callback)
+                # Use chunked download for large files
+                if self._is_large_file(remote_path):
+                    success = self._download_large_file_chunked(remote_path, local_path, progress_callback, chunk_size)
+                    if success:
+                        logger.info(f"Downloaded large file {remote_path} to {local_path}")
+                        return True
+                    else:
+                        raise Exception("Chunked download failed")
                 else:
-                    self.sftp_client.get(remote_path, local_path)
-                
-                logger.info(f"Downloaded {remote_path} to {local_path}")
-                return True
+                    # Standard download for smaller files
+                    if progress_callback:
+                        self.sftp_client.get(remote_path, local_path, callback=progress_callback)
+                    else:
+                        self.sftp_client.get(remote_path, local_path)
+                    
+                    logger.info(f"Downloaded {remote_path} to {local_path}")
+                    return True
                 
             except paramiko.SSHException as e:
                 error_msg = str(e).lower()
@@ -267,6 +276,60 @@ class SSHConnection:
                 return False
         
         return False
+    
+    def _is_large_file(self, remote_path: str) -> bool:
+        """Check if file is large (>10MB) and needs chunked download"""
+        try:
+            stat_info = self.sftp_client.stat(remote_path)
+            file_size = stat_info.st_size
+            return file_size > 10 * 1024 * 1024  # 10MB threshold
+        except:
+            return False
+    
+    def _download_large_file_chunked(self, remote_path: str, local_path: str, 
+                                   progress_callback=None, chunk_size: int = 32768) -> bool:
+        """Download large files in chunks to avoid garbage packet errors"""
+        try:
+            # Get file size
+            stat_info = self.sftp_client.stat(remote_path)
+            total_size = stat_info.st_size
+            
+            logger.info(f"Starting chunked download for large file: {remote_path} ({total_size} bytes)")
+            
+            # Open remote and local files
+            with self.sftp_client.open(remote_path, 'rb') as remote_file:
+                with open(local_path, 'wb') as local_file:
+                    downloaded = 0
+                    
+                    while downloaded < total_size:
+                        # Calculate chunk size for this iteration
+                        remaining = total_size - downloaded
+                        current_chunk_size = min(chunk_size, remaining)
+                        
+                        # Read chunk from remote file
+                        chunk = remote_file.read(current_chunk_size)
+                        if not chunk:
+                            break
+                        
+                        # Write chunk to local file
+                        local_file.write(chunk)
+                        downloaded += len(chunk)
+                        
+                        # Update progress
+                        if progress_callback:
+                            progress_callback(downloaded, total_size)
+                        
+                        # Small delay every 1MB to prevent overwhelming the connection
+                        if downloaded % (1024 * 1024) == 0:
+                            import time
+                            time.sleep(0.01)  # 10ms pause every 1MB
+            
+            logger.info(f"Chunked download completed: {downloaded}/{total_size} bytes")
+            return downloaded == total_size
+            
+        except Exception as e:
+            logger.error(f"Chunked download failed: {e}")
+            return False
     
     def get_file_stat(self, remote_path: str) -> Optional[Dict[str, Any]]:
         """Get file statistics"""
