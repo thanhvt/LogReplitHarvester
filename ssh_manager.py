@@ -3,16 +3,20 @@ SSH Connection Management for SSH Log Collector
 Handles SSH connections, authentication, and SFTP operations.
 """
 
-import paramiko
 import os
-import socket
 import stat
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-import fnmatch
+import socket
 import logging
+import paramiko
+from pathlib import Path
+import fnmatch
+import time
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from rich.console import Console
+
+# Import module copy file mới
+from file_copy import copy_file_from_server, copy_with_expect
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -205,87 +209,85 @@ class SSHConnection:
             logger.error(f"Error accessing {path}: {e}")
     
     def download_file(self, remote_path: str, local_path: str, progress_callback=None, max_retries: int = 3, chunk_size: int = 32768) -> bool:
-        """Download a file from remote server with retry mechanism"""
-        if not self.connected or not self.sftp_client:
+        """
+        Copy file từ server về máy local
+        
+        Tham số đầu vào:
+          - remote_path: Đường dẫn file trên server
+          - local_path: Đường dẫn file để lưu ở local
+          - progress_callback: Hàm callback báo tiến độ (không dùng với SCP)
+          - max_retries: Số lần thử lại tối đa
+          - chunk_size: Không sử dụng với cơ chế copy
+          
+        Tham số đầu ra:
+          - bool: True nếu copy thành công, False nếu có lỗi
+        
+        Khi nào gọi hàm:
+          - Được gọi từ FileTransferManager để copy file từ server
+        """
+        if not self.connected:
             raise Exception("Not connected to server")
         
-        # Ensure local directory exists
+        # Đảm bảo thư mục local tồn tại
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         
+        # Tạo thông tin server để dùng với module copy
+        server_info = {
+            'host': self.hostname,
+            'port': self.port,
+            'username': self.username,
+            'password': self.password,
+            'key_file': self.key_file
+        }
+        
+        logger.info(f"Bắt đầu copy file {remote_path} về {local_path}")
+        
+        # Thử copy file với nhiều cách khác nhau
         for attempt in range(max_retries):
             try:
-                # Use chunked download for large files
-                if self._is_large_file(remote_path):
-                    success = self._download_large_file_chunked(remote_path, local_path, progress_callback, chunk_size)
-                    if success:
-                        logger.info(f"Downloaded large file {remote_path} to {local_path}")
+                # Phương pháp 1: Sử dụng SCP với key file
+                if self.key_file and os.path.exists(self.key_file):
+                    logger.info(f"Thử copy file với key authentication (lần {attempt+1}/{max_retries})")
+                    if copy_file_from_server(server_info, remote_path, local_path):
                         return True
-                    else:
-                        raise Exception("Chunked download failed")
-                else:
-                    # Standard download for smaller files
-                    if progress_callback:
-                        self.sftp_client.get(remote_path, local_path, callback=progress_callback)
-                    else:
-                        self.sftp_client.get(remote_path, local_path)
-                    
-                    logger.info(f"Downloaded {remote_path} to {local_path}")
-                    return True
                 
-            except paramiko.SSHException as e:
-                error_msg = str(e).lower()
-                if "garbage" in error_msg or "packet" in error_msg:
-                    logger.warning(f"SSH packet error on attempt {attempt + 1}/{max_retries}: {e}")
-                    if attempt < max_retries - 1:
-                        # Clean up partial download
-                        if os.path.exists(local_path):
-                            try:
-                                os.remove(local_path)
-                                logger.info(f"Removed partial download: {local_path}")
-                            except:
-                                pass
+                # Phương pháp 2: Sử dụng SCP với password thông qua expect script
+                elif self.password:
+                    logger.info(f"Thử copy file với password authentication (lần {attempt+1}/{max_retries})")
+                    if copy_with_expect(server_info, remote_path, local_path):
+                        return True
                         
-                        # Wait longer before retry
-                        import time
-                        wait_time = (attempt + 1) * 3  # Progressive backoff: 3, 6, 9 seconds
-                        logger.info(f"Waiting {wait_time} seconds before retry...")
-                        time.sleep(wait_time)
-                        
-                        # Force reconnect with fresh connection
-                        logger.info("Force reconnecting with fresh SSH connection...")
-                        self.disconnect()
-                        time.sleep(2)  # Brief pause before reconnect
-                        
-                        if self.connect():
-                            logger.info("Reconnected successfully")
-                            continue
-                        else:
-                            logger.error("Failed to reconnect")
-                            return False
-                    else:
-                        logger.error(f"Max retries reached for {remote_path} - garbage packet error persists")
-                        return False
+                # Phương pháp 3: Sử dụng SFTP cũ (legacy) nếu các cách trên không được
                 else:
-                    logger.error(f"SSH error downloading {remote_path}: {e}")
-                    if attempt < max_retries - 1:
-                        import time
-                        time.sleep(2)
-                        continue
-                    return False
+                    logger.info(f"Thử copy file với SFTP (lần {attempt+1}/{max_retries})")
+                    if not self.sftp_client:
+                        self.sftp_client = self.ssh_client.open_sftp()
                     
-            except socket.error as e:
-                logger.warning(f"Network error on attempt {attempt + 1}/{max_retries}: {e}")
-                if attempt < max_retries - 1:
-                    import time
-                    time.sleep(2)  # Wait before retry
-                    continue
-                else:
-                    logger.error(f"Network error downloading {remote_path}: {e}")
-                    return False
+                    # Download file bình thường qua SFTP
+                    self.sftp_client.get(remote_path, local_path)
+                    logger.info(f"Đã copy file {remote_path} về {local_path} qua SFTP")
+                    return True
                     
             except Exception as e:
-                logger.error(f"Unexpected error downloading {remote_path}: {e}")
-                return False
+                logger.warning(f"Lỗi khi copy lần {attempt+1}/{max_retries}: {e}")
+                if attempt < max_retries - 1:
+                    # Chờ và thử lại
+                    wait_time = (attempt + 1) * 2
+                    logger.info(f"Chờ {wait_time} giây trước khi thử lại...")
+                    time.sleep(wait_time)
+                    
+                    # Thử kết nối lại
+                    logger.info("Khởi tạo lại kết nối SSH...")
+                    self.disconnect()
+                    time.sleep(1)
+                    
+                    if self.connect():
+                        logger.info("Kết nối lại thành công")
+                    else:
+                        logger.error("Không thể kết nối lại")
+                else:
+                    logger.error(f"Đã thử tất cả các phương pháp, không thể copy file: {e}")
+                    return False
         
         return False
     
@@ -296,51 +298,6 @@ class SSHConnection:
             file_size = stat_info.st_size
             return file_size > 10 * 1024 * 1024  # 10MB threshold
         except:
-            return False
-    
-    def _download_large_file_chunked(self, remote_path: str, local_path: str, 
-                                   progress_callback=None, chunk_size: int = 32768) -> bool:
-        """Download large files in chunks to avoid garbage packet errors"""
-        try:
-            # Get file size
-            stat_info = self.sftp_client.stat(remote_path)
-            total_size = stat_info.st_size
-            
-            logger.info(f"Starting chunked download for large file: {remote_path} ({total_size} bytes)")
-            
-            # Open remote and local files
-            with self.sftp_client.open(remote_path, 'rb') as remote_file:
-                with open(local_path, 'wb') as local_file:
-                    downloaded = 0
-                    
-                    while downloaded < total_size:
-                        # Calculate chunk size for this iteration
-                        remaining = total_size - downloaded
-                        current_chunk_size = min(chunk_size, remaining)
-                        
-                        # Read chunk from remote file
-                        chunk = remote_file.read(current_chunk_size)
-                        if not chunk:
-                            break
-                        
-                        # Write chunk to local file
-                        local_file.write(chunk)
-                        downloaded += len(chunk)
-                        
-                        # Update progress
-                        if progress_callback:
-                            progress_callback(downloaded, total_size)
-                        
-                        # Small delay every 1MB to prevent overwhelming the connection
-                        if downloaded % (1024 * 1024) == 0:
-                            import time
-                            time.sleep(0.01)  # 10ms pause every 1MB
-            
-            logger.info(f"Chunked download completed: {downloaded}/{total_size} bytes")
-            return downloaded == total_size
-            
-        except Exception as e:
-            logger.error(f"Chunked download failed: {e}")
             return False
     
     def get_file_stat(self, remote_path: str) -> Optional[Dict[str, Any]]:
