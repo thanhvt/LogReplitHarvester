@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from rich.console import Console
 
 # Import module copy file mới
-from file_copy import copy_file_from_server, copy_with_paramiko
+from file_copy import copy_with_paramiko
 
 console = Console()
 logger = logging.getLogger(__name__)
