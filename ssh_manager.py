@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from rich.console import Console
 
 # Import module copy file mới
-from file_copy import copy_file_from_server, copy_with_expect
+from file_copy import copy_file_from_server, copy_with_paramiko
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -251,10 +251,10 @@ class SSHConnection:
                     if copy_file_from_server(server_info, remote_path, local_path):
                         return True
                 
-                # Phương pháp 2: Sử dụng SCP với password thông qua expect script
+                # Phương pháp 2: Sử dụng Paramiko SFTP với xử lý lỗi nâng cao
                 elif self.password:
-                    logger.info(f"Thử copy file với password authentication (lần {attempt+1}/{max_retries})")
-                    if copy_with_expect(server_info, remote_path, local_path):
+                    logger.info(f"Thử copy file với Paramiko SFTP nâng cao (lần {attempt+1}/{max_retries})")
+                    if copy_with_paramiko(server_info, remote_path, local_path, progress_callback):
                         return True
                         
                 # Phương pháp 3: Sử dụng SFTP cũ (legacy) nếu các cách trên không được
