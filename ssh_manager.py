@@ -32,12 +32,21 @@ class SSHConnection:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             
-            # Prepare connection parameters
+            # Prepare connection parameters with optimized settings
             connect_params = {
                 'hostname': self.config['host'],
                 'port': self.config.get('port', 22),
                 'username': self.config['username'],
-                'timeout': self.config.get('timeout', 30)
+                'timeout': self.config.get('timeout', 30),
+                'banner_timeout': 60,  # Increase banner timeout
+                'auth_timeout': 60,    # Increase auth timeout
+                'sock': None,          # Use default socket
+                'gss_auth': False,     # Disable GSS authentication
+                'gss_kex': False,      # Disable GSS key exchange
+                'disabled_algorithms': {
+                    'kex': ['diffie-hellman-group1-sha1'],  # Disable weak algorithms
+                    'cipher': ['blowfish-cbc', '3des-cbc']
+                }
             }
             
             # Handle authentication
@@ -173,27 +182,61 @@ class SSHConnection:
         except Exception as e:
             logger.error(f"Error accessing {path}: {e}")
     
-    def download_file(self, remote_path: str, local_path: str, progress_callback=None) -> bool:
-        """Download a file from remote server"""
+    def download_file(self, remote_path: str, local_path: str, progress_callback=None, max_retries: int = 3) -> bool:
+        """Download a file from remote server with retry mechanism"""
         if not self.connected or not self.sftp_client:
             raise Exception("Not connected to server")
         
-        try:
-            # Ensure local directory exists
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            
-            # Download file with progress callback
-            if progress_callback:
-                self.sftp_client.get(remote_path, local_path, callback=progress_callback)
-            else:
-                self.sftp_client.get(remote_path, local_path)
-            
-            logger.info(f"Downloaded {remote_path} to {local_path}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error downloading {remote_path}: {e}")
-            return False
+        # Ensure local directory exists
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        
+        for attempt in range(max_retries):
+            try:
+                # Download file with progress callback
+                if progress_callback:
+                    self.sftp_client.get(remote_path, local_path, callback=progress_callback)
+                else:
+                    self.sftp_client.get(remote_path, local_path)
+                
+                logger.info(f"Downloaded {remote_path} to {local_path}")
+                return True
+                
+            except paramiko.SSHException as e:
+                error_msg = str(e).lower()
+                if "garbage" in error_msg or "packet" in error_msg:
+                    logger.warning(f"SSH packet error on attempt {attempt + 1}/{max_retries}: {e}")
+                    if attempt < max_retries - 1:
+                        # Try to reconnect
+                        logger.info("Attempting to reconnect...")
+                        self.disconnect()
+                        if self.connect():
+                            logger.info("Reconnected successfully")
+                            continue
+                        else:
+                            logger.error("Failed to reconnect")
+                            return False
+                    else:
+                        logger.error(f"Max retries reached for {remote_path}")
+                        return False
+                else:
+                    logger.error(f"SSH error downloading {remote_path}: {e}")
+                    return False
+                    
+            except socket.error as e:
+                logger.warning(f"Network error on attempt {attempt + 1}/{max_retries}: {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2)  # Wait before retry
+                    continue
+                else:
+                    logger.error(f"Network error downloading {remote_path}: {e}")
+                    return False
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error downloading {remote_path}: {e}")
+                return False
+        
+        return False
     
     def get_file_stat(self, remote_path: str) -> Optional[Dict[str, Any]]:
         """Get file statistics"""

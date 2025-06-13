@@ -36,11 +36,15 @@ settings:
   # Default directory to download files
   default_download_path: "./downloads"
   
-  # Maximum number of concurrent file transfers
-  max_concurrent_transfers: 5
+  # Maximum number of concurrent file transfers (giảm để tránh lỗi packet)
+  max_concurrent_transfers: 2
   
-  # Number of retry attempts for failed operations
-  retry_attempts: 3
+  # Number of retry attempts for failed operations (tăng để xử lý lỗi mạng)
+  retry_attempts: 5
   
-  # Connection timeout in seconds
-  connection_timeout: 30
+  # Connection timeout in seconds (tăng cho kết nối ổn định hơn)
+  connection_timeout: 60
+  
+  # SSH specific settings
+  ssh_banner_timeout: 60
+  ssh_auth_timeout: 60
