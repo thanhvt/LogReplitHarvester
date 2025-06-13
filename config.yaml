@@ -2,75 +2,35 @@
 # Edit this file to configure your servers and log directories
 
 servers:
-  - name: "Production Server 1"
-    host: "192.168.1.100"
-    port: 22
-    username: "your_username"
-    password: "your_password"  # Optional, use key_file instead for better security
-    key_file: null  # Path to SSH private key file (e.g., "~/.ssh/id_rsa")
-    passphrase: null  # Passphrase for key file if needed
-    timeout: 30
-
-  - name: "Development Server"
-    host: "192.168.1.101"
-    port: 22
-    username: "dev_user"
-    password: null
-    key_file: "~/.ssh/id_rsa"  # Use SSH key authentication
-    passphrase: null
-    timeout: 30
-
-  - name: "Staging Server"
-    host: "staging.example.com"
-    port: 2222
-    username: "staging_user"
-    password: null
-    key_file: "~/.ssh/staging_key"
-    passphrase: null
-    timeout: 30
+  # Ví dụ cấu hình server sử dụng username/password
+  - name: "My Linux Server"
+    host: "192.168.1.100"        # Thay bằng IP hoặc hostname của server
+    port: 22                     # Cổng SSH (thường là 22)
+    username: "your_username"    # Tên đăng nhập SSH
+    password: "your_password"    # Mật khẩu SSH
+    key_file: null               # Đặt null khi dùng password
+    passphrase: null             # Không cần khi dùng password
+    timeout: 30                  # Thời gian chờ kết nối (giây)
 
 directories:
+  # Cấu hình các thư mục log cần thu thập
+  - name: "System Logs"
+    path: "/var/log"                 # Đường dẫn thư mục trên server
+    server: "My Linux Server"        # Tên server (phải khớp với tên ở trên)
+    file_pattern: "*.log"            # Mẫu file cần lấy (*.log = tất cả file .log)
+    recursive: false                 # false = chỉ thư mục hiện tại, true = bao gồm thư mục con
+
   - name: "Application Logs"
     path: "/var/log/myapp"
-    server: "Production Server 1"
+    server: "My Linux Server"
     file_pattern: "*.log"
-    recursive: true
+    recursive: true                  # Tìm trong cả thư mục con
 
-  - name: "System Logs"
-    path: "/var/log"
-    server: "Production Server 1"
-    file_pattern: "*.log"
-    recursive: false
-
-  - name: "Nginx Access Logs"
+  - name: "Nginx Logs"
     path: "/var/log/nginx"
-    server: "Production Server 1"
-    file_pattern: "access*.log*"
+    server: "My Linux Server"
+    file_pattern: "*.log*"           # Bao gồm cả file nén (.log.gz)
     recursive: false
-
-  - name: "Nginx Error Logs"
-    path: "/var/log/nginx"
-    server: "Production Server 1"
-    file_pattern: "error*.log*"
-    recursive: false
-
-  - name: "Dev Application Logs"
-    path: "/home/dev/logs"
-    server: "Development Server"
-    file_pattern: "*.log"
-    recursive: true
-
-  - name: "Database Logs"
-    path: "/var/log/mysql"
-    server: "Production Server 1"
-    file_pattern: "*.log"
-    recursive: false
-
-  - name: "Staging Application Logs"
-    path: "/opt/app/logs"
-    server: "Staging Server"
-    file_pattern: "app*.log"
-    recursive: true
 
 settings:
   # Default directory to download files
