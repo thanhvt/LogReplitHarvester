@@ -1,0 +1,51 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install paramiko rich click pyyaml keyboard pyinstaller
+    
+    - name: Build executable
+      run: |
+        pyinstaller --onefile --console --name "ssh-log-collector" main.py
+    
+    - name: Copy config file
+      run: |
+        copy config.yaml dist\config.yaml
+        
+    - name: Create README for distribution
+      run: |
+        echo "SSH Log Collector - Windows Executable" > dist\README.txt
+        echo "" >> dist\README.txt
+        echo "1. Edit config.yaml with your server details" >> dist\README.txt
+        echo "2. Run ssh-log-collector.exe" >> dist\README.txt
+        echo "" >> dist\README.txt
+        echo "For help, see: https://github.com/your-repo/ssh-log-collector" >> dist\README.txt
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ssh-log-collector-windows
+        path: |
+          dist/ssh-log-collector.exe
+          dist/config.yaml
+          dist/README.txt
