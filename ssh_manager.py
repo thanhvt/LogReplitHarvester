@@ -118,7 +118,8 @@ class SSHConnection:
             logger.error(f"Error disconnecting from {self.config['name']}: {e}")
     
     def list_files(self, directory_path: str, file_pattern: str = "*", 
-                   recursive: bool = False, time_filter: Optional[datetime] = None) -> List[Dict[str, Any]]:
+                   recursive: bool = False, time_filter: Optional[datetime] = None, 
+                   time_filter_end: Optional[datetime] = None) -> List[Dict[str, Any]]:
         """List files in directory matching criteria"""
         if not self.connected or not self.sftp_client:
             raise Exception("Not connected to server")
@@ -126,7 +127,7 @@ class SSHConnection:
         files = []
         
         try:
-            self._list_files_recursive(directory_path, file_pattern, recursive, time_filter, files)
+            self._list_files_recursive(directory_path, file_pattern, recursive, time_filter, files, time_filter_end)
         except Exception as e:
             logger.error(f"Error listing files in {directory_path}: {e}")
             raise
@@ -134,7 +135,8 @@ class SSHConnection:
         return files
     
     def _list_files_recursive(self, path: str, pattern: str, recursive: bool, 
-                            time_filter: Optional[datetime], files: List[Dict[str, Any]]):
+                            time_filter: Optional[datetime], files: List[Dict[str, Any]], 
+                            time_filter_end: Optional[datetime] = None):
         """Recursively list files matching criteria"""
         try:
             for item in self.sftp_client.listdir_attr(path):
@@ -143,21 +145,26 @@ class SSHConnection:
                 if stat.S_ISDIR(item.st_mode):
                     # Directory
                     if recursive:
-                        self._list_files_recursive(item_path, pattern, recursive, time_filter, files)
+                        self._list_files_recursive(item_path, pattern, recursive, time_filter, files, time_filter_end)
                 else:
                     # File
                     if fnmatch.fnmatch(item.filename, pattern):
                         # Check time filter
-                        if time_filter:
-                            file_mtime = datetime.fromtimestamp(item.st_mtime)
-                            if file_mtime < time_filter:
-                                continue
+                        file_mtime = datetime.fromtimestamp(item.st_mtime)
+                        
+                        # Single date filter (files modified after this date)
+                        if time_filter and file_mtime < time_filter:
+                            continue
+                        
+                        # Date range filter (files modified between start and end dates)
+                        if time_filter_end and file_mtime > time_filter_end:
+                            continue
                         
                         files.append({
                             'path': item_path,
                             'name': item.filename,
                             'size': item.st_size,
-                            'mtime': datetime.fromtimestamp(item.st_mtime),
+                            'mtime': file_mtime,
                             'mode': item.st_mode
                         })
         

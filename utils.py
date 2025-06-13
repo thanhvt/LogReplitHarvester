@@ -97,6 +97,7 @@ def get_time_filter_options() -> List[Tuple[str, Optional[datetime]]]:
         ("Last 3 days", now - timedelta(days=3)),
         ("Last week", now - timedelta(weeks=1)),
         ("Last month", now - timedelta(days=30)),
+        ("Custom date range", "custom"),
     ]
     
     return options
@@ -192,7 +193,11 @@ def parse_time_string(time_str: str) -> Optional[datetime]:
         "%d/%m/%Y",
         "%m/%d/%Y %H:%M:%S",
         "%m/%d/%Y %H:%M",
-        "%m/%d/%Y"
+        "%m/%d/%Y",
+        "%Y%m%d",
+        "%d-%m-%Y",
+        "%d-%m-%Y %H:%M",
+        "%d-%m-%Y %H:%M:%S"
     ]
     
     for fmt in formats:
@@ -202,6 +207,50 @@ def parse_time_string(time_str: str) -> Optional[datetime]:
             continue
     
     return None
+
+def get_custom_time_range():
+    """Get custom time range from user input"""
+    from rich.console import Console
+    from rich.prompt import Prompt
+    
+    console = Console()
+    
+    console.print("\n[bold]Custom Date Range Setup[/bold]")
+    console.print("Supported formats:")
+    console.print("- YYYY-MM-DD (e.g., 2024-01-15)")
+    console.print("- DD/MM/YYYY (e.g., 15/01/2024)")
+    console.print("- DD-MM-YYYY (e.g., 15-01-2024)")
+    console.print("- YYYY-MM-DD HH:MM (e.g., 2024-01-15 14:30)")
+    console.print("- DD/MM/YYYY HH:MM (e.g., 15/01/2024 14:30)")
+    
+    try:
+        # Get start date
+        start_str = Prompt.ask("\nEnter start date/time")
+        start_date = parse_time_string(start_str)
+        
+        if not start_date:
+            console.print("[red]Invalid start date format![/red]")
+            return None, None
+        
+        # Get end date
+        end_str = Prompt.ask("Enter end date/time")
+        end_date = parse_time_string(end_str)
+        
+        if not end_date:
+            console.print("[red]Invalid end date format![/red]")
+            return None, None
+        
+        # Validate date range
+        if start_date >= end_date:
+            console.print("[red]Start date must be before end date![/red]")
+            return None, None
+        
+        console.print(f"[green]Custom range set: {start_date.strftime('%Y-%m-%d %H:%M')} to {end_date.strftime('%Y-%m-%d %H:%M')}[/green]")
+        return start_date, end_date
+        
+    except Exception as e:
+        console.print(f"[red]Error setting custom date range: {e}[/red]")
+        return None, None
 
 def get_system_info() -> dict:
     """Get basic system information"""

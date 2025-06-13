@@ -23,7 +23,7 @@ import keyboard
 from config import ConfigManager
 from ssh_manager import SSHManager, SSHConnection
 from file_transfer import FileTransferManager
-from utils import format_bytes, get_time_filter_options
+from utils import format_bytes, get_time_filter_options, get_custom_time_range
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class LogCollectorUI:
         self.selected_servers = set()
         self.selected_directories = {}  # server_name -> [directory_configs]
         self.time_filter = None
+        self.time_filter_end = None  # For custom date range
         self.download_path = ""
         
     def run(self):
@@ -87,7 +88,12 @@ class LogCollectorUI:
         menu_text.append("2. Select Log Directories", style="white")
         menu_text.append(f" ({total_dirs} selected)\n", style="dim")
         
-        time_desc = str(self.time_filter) if self.time_filter else "Not set"
+        if self.time_filter and self.time_filter_end:
+            time_desc = f"Custom: {self.time_filter.strftime('%Y-%m-%d %H:%M')} to {self.time_filter_end.strftime('%Y-%m-%d %H:%M')}"
+        elif self.time_filter:
+            time_desc = f"After: {self.time_filter.strftime('%Y-%m-%d %H:%M')}"
+        else:
+            time_desc = "Not set"
         menu_text.append("3. Select Time Filter", style="white")
         menu_text.append(f" ({time_desc})\n", style="dim")
         
@@ -261,8 +267,22 @@ class LogCollectorUI:
             idx = int(choice) - 1
             
             if 0 <= idx < len(options):
-                _, self.time_filter = options[idx]
-                console.print(f"[green]Time filter set to: {options[idx][0]}[/green]")
+                desc, filter_value = options[idx]
+                
+                if filter_value == "custom":
+                    # Handle custom date range
+                    start_date, end_date = get_custom_time_range()
+                    if start_date and end_date:
+                        self.time_filter = start_date
+                        self.time_filter_end = end_date
+                        console.print(f"[green]Custom time filter set: {start_date.strftime('%Y-%m-%d %H:%M')} to {end_date.strftime('%Y-%m-%d %H:%M')}[/green]")
+                    else:
+                        console.print("[yellow]Custom date range not set[/yellow]")
+                else:
+                    # Handle predefined filters
+                    self.time_filter = filter_value
+                    self.time_filter_end = None
+                    console.print(f"[green]Time filter set to: {desc}[/green]")
             else:
                 console.print("[red]Invalid selection![/red]")
                 
@@ -358,7 +378,8 @@ class LogCollectorUI:
                         dir_config['path'],
                         dir_config.get('file_pattern', '*'),
                         dir_config.get('recursive', False),
-                        self.time_filter
+                        self.time_filter,
+                        self.time_filter_end
                     )
                     
                     for file_info in files:
