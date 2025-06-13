@@ -1,0 +1,86 @@
+# SSH Log Collector Configuration File
+# Edit this file to configure your servers and log directories
+
+servers:
+  - name: "Production Server 1"
+    host: "192.168.1.100"
+    port: 22
+    username: "your_username"
+    password: "your_password"  # Optional, use key_file instead for better security
+    key_file: null  # Path to SSH private key file (e.g., "~/.ssh/id_rsa")
+    passphrase: null  # Passphrase for key file if needed
+    timeout: 30
+
+  - name: "Development Server"
+    host: "192.168.1.101"
+    port: 22
+    username: "dev_user"
+    password: null
+    key_file: "~/.ssh/id_rsa"  # Use SSH key authentication
+    passphrase: null
+    timeout: 30
+
+  - name: "Staging Server"
+    host: "staging.example.com"
+    port: 2222
+    username: "staging_user"
+    password: null
+    key_file: "~/.ssh/staging_key"
+    passphrase: null
+    timeout: 30
+
+directories:
+  - name: "Application Logs"
+    path: "/var/log/myapp"
+    server: "Production Server 1"
+    file_pattern: "*.log"
+    recursive: true
+
+  - name: "System Logs"
+    path: "/var/log"
+    server: "Production Server 1"
+    file_pattern: "*.log"
+    recursive: false
+
+  - name: "Nginx Access Logs"
+    path: "/var/log/nginx"
+    server: "Production Server 1"
+    file_pattern: "access*.log*"
+    recursive: false
+
+  - name: "Nginx Error Logs"
+    path: "/var/log/nginx"
+    server: "Production Server 1"
+    file_pattern: "error*.log*"
+    recursive: false
+
+  - name: "Dev Application Logs"
+    path: "/home/dev/logs"
+    server: "Development Server"
+    file_pattern: "*.log"
+    recursive: true
+
+  - name: "Database Logs"
+    path: "/var/log/mysql"
+    server: "Production Server 1"
+    file_pattern: "*.log"
+    recursive: false
+
+  - name: "Staging Application Logs"
+    path: "/opt/app/logs"
+    server: "Staging Server"
+    file_pattern: "app*.log"
+    recursive: true
+
+settings:
+  # Default directory to download files
+  default_download_path: "./downloads"
+  
+  # Maximum number of concurrent file transfers
+  max_concurrent_transfers: 5
+  
+  # Number of retry attempts for failed operations
+  retry_attempts: 3
+  
+  # Connection timeout in seconds
+  connection_timeout: 30
