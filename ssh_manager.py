@@ -236,8 +236,8 @@ class SSHConnection:
             'host': self.config['host'],
             'port': self.config.get('port', 22),
             'username': self.config['username'],
-            'password': self.config.get('password'),
-            'key_file': self.config.get('key_file')
+            'password': self.config.get('password')
+            # Đã bỏ key_file vì chỉ dùng user/pass
         }
         
         logger.info(f"Bắt đầu copy file {remote_path} về {local_path}")
@@ -245,21 +245,16 @@ class SSHConnection:
         # Thử copy file với nhiều cách khác nhau
         for attempt in range(max_retries):
             try:
-                # Phương pháp 1: Sử dụng SCP với key file
-                if self.key_file and os.path.exists(self.key_file):
-                    logger.info(f"Thử copy file với key authentication (lần {attempt+1}/{max_retries})")
-                    if copy_file_from_server(server_info, remote_path, local_path):
-                        return True
-                
-                # Phương pháp 2: Sử dụng Paramiko SFTP với xử lý lỗi nâng cao
-                elif self.password:
+                # Chỉ dùng Paramiko SFTP với xử lý lỗi nâng cao
+                # Dùng xác thực user/pass
+                if self.config.get('password'):
                     logger.info(f"Thử copy file với Paramiko SFTP nâng cao (lần {attempt+1}/{max_retries})")
                     if copy_with_paramiko(server_info, remote_path, local_path, progress_callback):
                         return True
                         
-                # Phương pháp 3: Sử dụng SFTP cũ (legacy) nếu các cách trên không được
+                # Phương pháp dự phòng: Sử dụng SFTP cũ (legacy) nếu cách trên không được
                 else:
-                    logger.info(f"Thử copy file với SFTP (lần {attempt+1}/{max_retries})")
+                    logger.info(f"Thử download file thủ công với SFTP (lần {attempt+1}/{max_retries})")
                     if not self.sftp_client:
                         self.sftp_client = self.ssh_client.open_sftp()
                     
