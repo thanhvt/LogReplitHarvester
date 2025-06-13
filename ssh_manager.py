@@ -183,14 +183,14 @@ class SSHConnection:
                         if time_filter:
                             logger.debug(f"  - Time filter: {time_filter} ({time_filter.strftime('%d/%m/%Y %H:%M:%S')})")
                             if file_mtime < time_filter:
-                                logger.debug(f"  - SKIP: File quá cũ (mtime < time_filter)")
+                                # logger.debug(f"  - SKIP: File quá cũ (mtime < time_filter)")
                                 continue
                         
                         # Bộ lọc khoảng ngày (các file được sửa đổi giữa ngày bắt đầu và kết thúc)
                         if time_filter_end:
                             logger.debug(f"  - Time filter end: {time_filter_end} ({time_filter_end.strftime('%d/%m/%Y %H:%M:%S')})")
                             if file_mtime > time_filter_end:
-                                logger.debug(f"  - SKIP: File quá mới (mtime > time_filter_end)")
+                                # logger.debug(f"  - SKIP: File quá mới (mtime > time_filter_end)")
                                 continue
                         
                         logger.debug(f"  - ACCEPTED: File nằm trong khoảng thời gian lọc")
@@ -233,11 +233,11 @@ class SSHConnection:
         
         # Tạo thông tin server để dùng với module copy
         server_info = {
-            'host': self.hostname,
-            'port': self.port,
-            'username': self.username,
-            'password': self.password,
-            'key_file': self.key_file
+            'host': self.config['host'],
+            'port': self.config.get('port', 22),
+            'username': self.config['username'],
+            'password': self.config.get('password'),
+            'key_file': self.config.get('key_file')
         }
         
         logger.info(f"Bắt đầu copy file {remote_path} về {local_path}")
